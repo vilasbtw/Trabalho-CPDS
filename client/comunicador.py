@@ -1,6 +1,7 @@
 import socket
 import threading
 import json
+import string
 from utils.relogio_logico import RelogioLogico
 from crypto.criptografia import Criptografia
 
@@ -13,17 +14,35 @@ class ClienteBus:
 
     def receber(self):
         while True:
-            data = self.socket.recv(4096)
-            if not data: break
-            p = json.loads(data.decode('utf-8'))
-            self.relogio.sincronizar(p['tp'])
-            
-            msg = self.seguranca.decriptar(p['msg'])
-            print(f"\n[Recebido de {p['prod']} | T:{p['tp']}]: {msg}")
+            try:
+                data = self.socket.recv(4096)
+                if not data: break
+                p = json.loads(data.decode('utf-8'))
+                
+                if p.get('acao') == 'erro':
+                    print(f"\n[ALERTA DO SISTEMA]: {p['msg']}")
+                    continue
+                
+                self.relogio.sincronizar(p['tp'])
+                msg = self.seguranca.decriptar(p['msg'])
+                print(f"\n[Recebido de {p['prod']} | T:{p['tp']}]: {msg}")
+                
+                ack = {'acao': 'ack', 'prod': p['prod'], 'tp': p['tp'], 'tc': self.relogio.incrementar(), 'msg': p['msg']}
+                self.socket.sendall(json.dumps(ack).encode('utf-8'))
+            except:
+                break
 
     def conectar(self):
         self.socket.connect(('127.0.0.1', 5000))
-        self.nome = input("Nome: ")
+        
+        while True:
+            nome = input("Nome: ").strip()
+            permitidos = string.ascii_letters + string.digits
+            if all(c in permitidos for c in nome) and nome != "":
+                self.nome = nome
+                break
+            print("[ALERTA] Nome inválido! Use apenas letras (sem acentos) e números.")
+
         self.socket.sendall(json.dumps({'acao': 'registrar', 'nome': self.nome}).encode('utf-8'))
         threading.Thread(target=self.receber, daemon=True).start()
         
@@ -37,8 +56,12 @@ class ClienteBus:
             if opcao == "1":
                 dest = input("Destinatário: ")
                 txt = input("Mensagem: ")
-                tp = self.relogio.incrementar()
                 
+                if len(txt) > 100:
+                    print("[ALERTA] Mensagem muito longa! Limite de 100 caracteres.")
+                    continue
+                
+                tp = self.relogio.incrementar()
                 p = {'acao': 'enviar', 'tipo': 'unicast', 'dest': dest, 'prod': self.nome, 'tp': tp, 'msg': self.seguranca.encriptar(txt)}
                 self.socket.sendall(json.dumps(p).encode('utf-8'))
             elif opcao == "0":

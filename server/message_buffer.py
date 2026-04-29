@@ -27,14 +27,24 @@ class MessageBus:
                 p = json.loads(dados.decode('utf-8'))
                 
                 if p['acao'] == 'registrar':
-                    nome = p['nome']
-                    with self.mutex: self.clientes[nome] = conn
+                    novo_nome = p['nome']
+                    with self.mutex:
+                        if novo_nome in self.clientes:
+                            conn.sendall(json.dumps({'acao': 'erro', 'msg': 'Nome já em uso.'}).encode('utf-8'))
+                        else:
+                            nome = novo_nome
+                            self.clientes[nome] = conn
                 
                 elif p['acao'] == 'enviar':
                     with self.mutex:
                         alvos = []
-                        if p['tipo'] == 'unicast': alvos = [self.clientes.get(p['dest'])]
-                        elif p['tipo'] == 'multicast': alvos = [self.clientes[c] for c in self.canais.get(p['dest'], [])]
+                        if p['tipo'] == 'unicast':
+                            if p['dest'] not in self.clientes:
+                                conn.sendall(json.dumps({'acao': 'erro', 'msg': f'Usuário {p["dest"]} não encontrado ou offline.'}).encode('utf-8'))
+                            else:
+                                alvos = [self.clientes.get(p['dest'])]
+                        elif p['tipo'] == 'multicast':
+                            alvos = [self.clientes[c] for c in self.canais.get(p['dest'], [])]
                         
                         for c in filter(None, alvos):
                             c.sendall(json.dumps(p).encode('utf-8'))
