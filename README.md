@@ -1,73 +1,98 @@
-# Trabalho-CPDS
+# Trabalho-CPDS - Sistema de Mensageria Distribuído
 
-## Integrantes
-- Kaique Vilas Boa
-- Evelyn Theodoro
-- Kauany das Gracas
+**Disciplina:** Computação Paralela e Sistemas Distribuídos  
+**Integrantes:** Kaique Vilas Boa · Evelyn Theodoro · Kauany das Graças
 
+---
 
-## Distributed Message Bus com Relógio de Lamport
-Este projeto consiste em um sistema de troca de mensagens via linha de comando (CMD) que aplica conceitos fundamentais de Sistemas Distribuídos. O sistema utiliza um barramento centralizado (Message Bus) para gerenciar a comunicação entre múltiplos clientes, garantindo a ordenação causal de eventos através de relógios lógicos e mantendo logs de auditoria.
+## Sobre o projeto
+
+Este projeto implementa um Message Bus distribuído via linha de comando. A arquitetura é cliente-servidor sobre TCP/IP: um servidor central roteia mensagens entre múltiplos clientes conectados simultaneamente, garantindo a ordenação dos eventos por meio do Relógio Lógico e mantendo uma trilha de auditoria em arquivo físico.
+
+---
 
 ## Funcionalidades
-Comunicação Unicast: Envio de mensagens diretas e privadas entre usuários registrados.
 
-Relógio Lógico de Lamport: Implementação de sincronização de tempo para garantir a ordem correta das mensagens em um ambiente distribuído.
+| Recurso | Descrição |
+|---|---|
+| **Unicast** | Envio de mensagem direta e privada para um usuário específico |
+| **Broadcast** | Envio de mensagem global para todos os clientes conectados |
+| **Multicast** | Envio de mensagem para todos os membros de um canal nomeado |
+| **Canais** | Criação, entrada e saída de canais nomeados pelo cliente |
+| **Relógio Lógico** | Cada mensagem carrega um carimbo lógico de tempo (`tp`); ao receber, o cliente executa `max(local, recebido) + 1` |
+| **ACK com timestamp** | O consumidor confirma o recebimento com seu próprio carimbo lógico (`tc`) |
+| **Auditoria em log** | O servidor grava produtor, consumidor, `tp`, `tc` e conteúdo cifrado em `server/auditoria_log.txt` |
+| **Criptografia Base64** | O conteúdo das mensagens é codificado antes de trafegar na rede |
+| **Exclusão mútua** | `threading.Lock` protege todas as estruturas compartilhadas do servidor |
+| **Nomeação de clientes** | Cada cliente se registra com um nome único (letras e números) |
 
-Criptografia Base64: Camada de codificação (simulando cifragem) para garantir que o texto original não trafegue de forma legível na rede.
+---
 
-Auditoria de Logs: Registro automático no servidor de todas as transações, incluindo o carimbo de tempo (timestamp) de envio e recebimento (ACK).
+## Como executar
 
-Multithreading: Suporte para múltiplos clientes conectados simultaneamente ao servidor.
+### 1. Clonar o repositório
 
-## Estrutura do Projeto
-message_buffer.py: O servidor central que coordena o tráfego de mensagens, gerencia os usuários conectados e gera os logs de auditoria.
+```bash
+git clone https://github.com/vilasbtw/Trabalho-CPDS.git
+cd Trabalho-CPDS
+```
 
-comunicador.py: Interface do usuário (Cliente) para registro, envio e recebimento de mensagens.
+### 2. Iniciar o servidor
 
-utils/relogio_logico.py: Componente responsável pela lógica de incremento e sincronização do tempo lógico.
+O servidor deve ser iniciado primeiro. Ele ficará escutando conexões na porta `5000`.
 
-crypto/criptografia.py: Módulo que realiza a codificação e decodificação das mensagens em Base64.
+```bash
+python server/message_buffer.py
+```
 
-## Como Executar
-Como você já clonou o projeto, siga estes passos nos terminais do seu computador:
+### 3. Iniciar os clientes
 
-1. Iniciar o Servidor (Barramento)
-O servidor deve ser o primeiro a ser iniciado. Ele ficará aguardando conexões na porta 5000.
+Abra um terminal separado para cada usuário que deseja simular e execute:
 
-Bash
-python message_buffer.py
+```bash
+python -m client.comunicador
+```
 
-2. Iniciar os Clientes
-Abra novos terminais para cada usuário que deseja criar (ex: um para "Alice" e outro para "Bob") e execute:
+---
 
-Bash
-python comunicador.py
+## Como usar
 
-3. Utilização no Terminal
-Digite seu Nome quando solicitado (use apenas letras e números).
+Após iniciar o cliente, informe um nome de usuário único. O menu principal será exibido:
 
-Escolha a opção 1 para "Enviar Mensagem".
+```
+=== SISTEMA DE MENSAGENS ===
+1. Enviar Mensagem (Unicast)
+2. Enviar para Todos (Broadcast)
+3. Gerenciar Canais
+4. Enviar para Canal (Multicast)
+0. Sair
+```
 
-Informe o nome do Destinatário (ex: Bob).
+### Unicast
+Escolha `1`, informe o nome do destinatário e a mensagem (limite de 100 caracteres).
 
-Digite sua mensagem (limite de 100 caracteres) e pressione Enter.
+### Broadcast
+Escolha `2` e informe a mensagem. Todos os clientes conectados receberão.
 
-O sistema exibirá a confirmação e o destinatário verá a mensagem com o tempo lógico sincronizado.
+### Gerenciar canais
+Escolha `3` para acessar o submenu de canais:
+- **Criar canal** - cria um novo canal e já adiciona você como membro
+- **Entrar em canal** - inscreve você em um canal existente
+- **Sair de canal** - remove você de um canal
+- **Listar canais** - exibe todos os canais e seus membros
 
-## Conceitos Aplicados
-Relógio Lógico (Sincronização)
-Para resolver o problema da falta de um relógio global em sistemas distribuídos, implementamos o Relógio de Lamport. Sempre que uma mensagem é recebida, o cliente executa:
+### Multicast
+Escolha `4`, informe o nome do canal e a mensagem. Todos os membros do canal receberão.
 
-Tempo_Local = max(Tempo_Local, Tempo_Recebido) + 1
+---
 
-Auditoria e Transparência
-O servidor mantém um ficheiro em server/auditoria_log.txt que regista:
+## Auditoria
 
-O carimbo de tempo do envio.
+Após a troca de mensagens, verifique o arquivo gerado em `server/auditoria_log.txt`. Cada linha registra uma entrega confirmada no formato:
 
-Identificação do remetente e destinatário.
+```
+[T:<tp>] <produtor> -> <consumidor> [T:<tc>] | Conteúdo: <mensagem_cifrada>
+```
 
-O carimbo de tempo da receção (ACK).
-
-O conteúdo cifrado da mensagem.
+- `tp` — carimbo lógico de **envio** (produtor)
+- `tc` — carimbo lógico de **recebimento** (consumidor, via ACK)
