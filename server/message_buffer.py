@@ -34,6 +34,14 @@ class MessageBus:
                         else:
                             nome = novo_nome
                             self.clientes[nome] = conn
+                            
+                elif p['acao'] == 'entrar_canal':
+                    canal = p['canal']
+                    with self.mutex:
+                        if canal not in self.canais:
+                            self.canais[canal] = []
+                        if nome not in self.canais[canal]:
+                            self.canais[canal].append(nome)
                 
                 elif p['acao'] == 'enviar':
                     with self.mutex:
@@ -44,7 +52,9 @@ class MessageBus:
                             else:
                                 alvos = [self.clientes.get(p['dest'])]
                         elif p['tipo'] == 'multicast':
-                            alvos = [self.clientes[c] for c in self.canais.get(p['dest'], [])]
+                            alvos = [self.clientes[c] for c in self.canais.get(p['dest'], []) if c in self.clientes]
+                        elif p['tipo'] == 'broadcast':
+                            alvos = list(self.clientes.values())
                         
                         for c in filter(None, alvos):
                             c.sendall(json.dumps(p).encode('utf-8'))
@@ -54,7 +64,11 @@ class MessageBus:
                     self.registrar_log(log)
         finally:
             if nome: 
-                with self.mutex: self.clientes.pop(nome, None)
+                with self.mutex:
+                    self.clientes.pop(nome, None)
+                    for canal in self.canais.values():
+                        if nome in canal:
+                            canal.remove(nome)
             conn.close()
 
     def iniciar(self):
